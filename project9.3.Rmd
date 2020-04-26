@@ -1,0 +1,112 @@
+---
+title: "Project 9.3 R Markdown Presentation & Plotly"
+author: "ElenaKush"
+date: '2020-04-26'
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r environment, include=FALSE, warning = FALSE, message = FALSE}
+if("pacman" %in% rownames(installed.packages()) == FALSE){ install.packages("pacman") }
+library(pacman)
+p_load(dplyr,
+       stringr,
+       tidyr,
+       plotly)
+```
+
+```{r datasets, include = FALSE, warning = FALSE, message = FALSE}
+local_path <- "C:/Users/kushnarevaei/Documents/GitHub/JH_R_Course/Course9/Week3/Project9.3/developing_data_products_plotly/"
+URL_cases_global <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+
+download.file(URL_cases_global,
+              destfile = paste0(local_path,"data/cases_global.csv"))
+
+cases_global <- read.csv(paste0(local_path,"data/cases_global.csv"))
+
+URL_deaths_global <- "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"
+
+download.file(URL_deaths_global,
+              destfile = paste0(local_path,"data/deaths_global.csv"))
+
+deaths_global <- read.csv(paste0(local_path,"data/deaths_global.csv"))
+
+```
+
+```{r EDA and preprocessing, include = FALSE, warning = FALSE, message = FALSE}
+##head(cases_global)
+##View(cases_global)
+##str(cases_global)
+##dim(cases_global)
+##names(cases_global)
+names(cases_global) <- str_remove(names(cases_global), "^X")
+names(deaths_global) <- str_remove(names(deaths_global), "^X")
+
+lastdate <- names(cases_global)[ncol(cases_global)]
+lastdate <- as.Date(lastdate, "%m.%e.%y")
+
+top15 <- cases_global %>%
+    mutate(total = cases_global[, ncol(cases_global)]) %>%
+    group_by(Country.Region = cases_global$Country.Region) %>%
+    summarise(total = sum(total)) %>%
+    arrange(desc(total)) %>%
+    head(15)
+
+cases_global <- cases_global %>%
+    pivot_longer(-c(1:4), names_to = "Date", values_to = "Cases") %>%
+    mutate(Date = as.Date(Date, "%m.%e.%y")) %>%
+    group_by(Country.Region, Date) %>%
+    summarise(Cases = sum(Cases)) %>%
+    filter(Cases != 0, Country.Region %in% top15$Country.Region)
+
+##dim(deaths_global)
+##names(deaths_global)
+deaths_global <- deaths_global %>%
+    pivot_longer(-c(1:4), names_to = "Date", values_to = "Deaths") %>%
+    mutate(Date = as.Date(Date, "%m.%e.%y")) %>%
+    group_by(Country.Region, Date) %>%
+    summarise(Deaths = sum(-Deaths)) %>%
+    filter(Country.Region %in% top15$Country.Region)
+
+test <- left_join(cases_global, deaths_global, by = c("Country.Region" = "Country.Region", "Date" = "Date")) %>%
+    arrange(Country.Region, Date) %>%
+    group_by(Country.Region) %>% 
+    mutate(Days.Since.First.Case = row_number())
+
+```
+
+## PROJECT DESCRIPTION
+
+For the project purposes we analysed how the COVID-19 confirmed cases and deaths were developed in different countries (top-15) since the first COVID-19 case was confirmed in each country. 
+
+We used data posted by the Center for Systems Science and Engineering (CSSE) at Johns Hopkins University:
+https://github.com/CSSEGISandData/COVID-19. 
+
+The data is up to `r lastdate`. 
+
+The project github repository with .Rmd file:
+https://github.com/ElenaKush/developing_data_products_plotly. 
+
+## PLOTS
+
+```{r plot, warning = FALSE, message = FALSE}
+x <- list(title = "Days since the first case in the country (for China since 2020-01-22)")
+
+plot_cases <- plot_ly(test, x = ~Days.Since.First.Case, y = ~Cases, color = ~Country.Region, type = 'scatter', mode = 'lines', colors = "Paired", legendgroup = ~Country.Region)
+
+plot_deaths <- plot_ly(test, x = ~Days.Since.First.Case, y = ~Deaths, color = ~Country.Region, type = 'scatter', mode = 'lines', colors = "Paired", legendgroup = ~Country.Region, showlegend = FALSE) %>%
+    layout(xaxis = x, legend = list(font = list(size = 12)))
+
+subplot(plot_cases, plot_deaths, nrows = 2, shareX = TRUE, titleY = TRUE) %>%
+    layout(xaxis = x,
+           annotations = list(
+               list(x = 0.5 , y = 1, text = "DETECTED CASES", showarrow = F, xref='paper', yref='paper', font = list(size = 18)),
+               list(x = 0.5 , y = 0.5, text = "DEATHS", showarrow = F, xref='paper', yref='paper', font = list(size = 18))
+               )
+           )
+```
+
+## THANK YOU
